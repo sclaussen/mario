@@ -1,72 +1,59 @@
-import { loadLevel } from './loaders.js';
-import { loadMarioSprite, loadBackgroundSprites } from './sprites.js';
-import Compositor from './compositor.js';
-
-
-
-function createBackground(backgrounds, sprites) {
-    const backgroundCanvas = document.createElement('canvas');
-    backgroundCanvasContext = backgroundCanvas.getContext('2d');
-    backgroundCanvas.width = 256;
-    backgroundCanvas.height = 240;
-    backgrounds.forEach(background => {
-        background.ranges.forEach(([ row1, row2, col1, col2 ]) => {
-            for (let row = row1; row < row2; row++) {
-                for (let col = col1; col < col2; col++) {
-                    sprites.draw(background.tile, backgroundCanvasContext, row, col);
-                }
-            }
-        });
-    });
-
-    return function drawBackground(context) {
-        context.drawImage(backgroundCanvas, 0, 0);
-    };
-}
-
-
-function createMario(sprite, pos) {
-    return function drawMario(context) {
-        sprite.drawUsingPixels('idle', context, pos.x, pos.y);
-    }
-}
-
-
-const screen = document.getElementById('screen');
-const context = screen.getContext('2d');
+import { loadImage, loadLevel } from './loaders.js';
+import SpriteSheet from './SpriteSheet.js';
+import Sprite from './Sprite.js';
+import BackgroundSprite from './BackgroundSprite.js';
+import Velocity from './traits/Velocity.js';
+import Jump from './traits/Jump.js';
+import Sprites from './Sprites.js';
+import Timer from './Timer.js';
+// import Keyboard from './Keyboard.js';
 
 
 Promise.all([
-    loadMarioSprite(),
-    loadBackgroundSprites(),
+    loadImage('./img/tiles.png'),
+    loadImage('./img/characters.gif'),
     loadLevel('1-1')
-]).then(([ marioSprite, backgroundSprites, level ]) => {
+]).then(([ tilesPng, charactersGif, level ]) => {
 
-    const compositor = new Compositor();
+    const charactersSpriteSheet = new SpriteSheet(charactersGif);
+    const marioCanvas = charactersSpriteSheet.createCanvasByPixel(276, 44, 16, 16);
+    const marioSprite = new Sprite(marioCanvas);
+    marioSprite.addTrait(new Velocity());
+    marioSprite.addTrait(new Jump());
+    marioSprite.pos.set(64, 200);
+    marioSprite.vel.set(200, -600);
 
-    const drawBackground = createBackground(level.backgrounds, backgroundSprites);
-    compositor.layers.push(drawBackground);
+    const tilesSpriteSheet = new SpriteSheet(tilesPng, 16, 16);
+    const groundCanvas = tilesSpriteSheet.createCanvasByTile(0, 0);
+    const skyCanvas = tilesSpriteSheet.createCanvasByTile(3, 23);
+    const backgroundSprite = new BackgroundSprite(level, {
+        'ground': groundCanvas,
+        'sky': skyCanvas
+    });
 
-    const pos = {
-        x: 3,
-        y: 3
+    const sprites = new Sprites([ backgroundSprite, marioSprite ]);
+
+    // const SPACE = 32;
+    // const keyboard = new Keyboard();
+    // keyboard.addMapping(SPACE, keyState => {
+    //     if (keyState) {
+    //         mario.jump.start();
+    //     } else {
+    //         mario.jump.cancel();
+    //     }
+    // });
+    // keyboard.listenTo(window);
+
+    const screen = document.getElementById('screen');
+    const context = screen.getContext('2d');
+
+    const gravity = 2000;
+    const timer = new Timer(1/60);
+    timer.update = function update(deltaTime) {
+        marioSprite.update(deltaTime);
+        marioSprite.vel.y += gravity * deltaTime;
+        sprites.draw(context);
     }
-    const drawMario = createMario(marioSprite, pos);
-    compositor.layers.push(drawMario);
 
-
-    // const vel = {
-    //     x: 2,
-    //     y: -10
-    // }
-
-
-    function update() {
-        pos.x += 2;
-        pos.y += 2;
-        compositor.draw(context);
-        requestAnimationFrame(update);
-    }
-
-    update();
+    timer.start();
 });
